@@ -31,10 +31,10 @@ export async function getNamespace({
   return await ns.metadata();
 }
 
-export type FilterOperator = "Eq" | "NotEq" | "Gt" | "Gte" | "Lt" | "Lte" | "In" | "NotIn" | "Contains" | "NotContains";
+export type FilterOperator = "Eq" | "NotEq" | "Gt" | "Gte" | "Lt" | "Lte" | "In" | "NotIn" | "Contains" | "NotContains" | "ContainsAllTokens";
 export type FilterCondition = [string, FilterOperator, any];
 export type QueryFilters = ["And", FilterCondition[]] | FilterCondition;
-export type RankBy = [string, "asc" | "desc"] | ["vector", "ANN", number[]];
+export type RankBy = [string, "asc" | "desc"] | ["vector", "ANN", number[]] | [string, "BM25", string];
 
 export async function queryNamespace({
   id,

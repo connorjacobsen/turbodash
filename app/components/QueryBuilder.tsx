@@ -1,15 +1,23 @@
 import { useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
+import { Checkbox } from "~/components/ui/checkbox";
+import { Label } from "~/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { FilterField, type Filter } from "~/components/FilterField";
-import { Plus } from "lucide-react";
+import { Plus, Search } from "lucide-react";
+import { Separator } from "~/components/ui/separator";
 import type { FilterOperator } from "~/lib/turbopuffer.server";
 
 interface QueryBuilderProps {
   schema: Record<string, any>;
-  onQuery: (filters: Filter[], orderBy?: { field: string; direction: "asc" | "desc" }, topK?: number) => void;
+  onQuery: (
+    filters: Filter[], 
+    orderBy?: { field: string; direction: "asc" | "desc" }, 
+    topK?: number,
+    fullTextSearch?: { field: string; query: string; usePhaseMatching: boolean }
+  ) => void;
   isLoading?: boolean;
 }
 
@@ -50,10 +58,19 @@ export function QueryBuilder({ schema, onQuery, isLoading }: QueryBuilderProps) 
   const [selectedField, setSelectedField] = useState<string>("");
   const [orderBy, setOrderBy] = useState<{ field: string; direction: "asc" | "desc" } | undefined>();
   const [topK, setTopK] = useState<number>(100);
+  const [fullTextSearch, setFullTextSearch] = useState<{ field: string; query: string; usePhaseMatching: boolean } | undefined>();
 
   const schemaFields = Object.keys(schema || {}).filter(key => {
     const fieldConfig = schema[key];
     return typeof fieldConfig === "object" && fieldConfig?.filterable !== false;
+  });
+
+  const fullTextSearchFields = Object.keys(schema || {}).filter(key => {
+    const fieldConfig = schema[key];
+    return typeof fieldConfig === "object" && (
+      fieldConfig?.full_text_search === true || 
+      (typeof fieldConfig?.full_text_search === "object" && fieldConfig?.full_text_search)
+    );
   });
 
   const addFilter = () => {
@@ -80,7 +97,7 @@ export function QueryBuilder({ schema, onQuery, isLoading }: QueryBuilderProps) 
   };
 
   const handleQuery = () => {
-    onQuery(filters, orderBy, topK);
+    onQuery(filters, orderBy, topK, fullTextSearch);
   };
 
   const handleOrderByChange = (field: string) => {
@@ -141,6 +158,64 @@ export function QueryBuilder({ schema, onQuery, isLoading }: QueryBuilderProps) 
             </div>
           )}
         </div>
+
+        {fullTextSearchFields.length > 0 && (
+          <>
+            <Separator />
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Search className="h-4 w-4" />
+                <div className="text-sm font-medium">Full Text Search</div>
+              </div>
+              
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Select 
+                    value={fullTextSearch?.field || ""} 
+                    onValueChange={(field) => setFullTextSearch(prev => ({ 
+                      field, 
+                      query: prev?.query || "", 
+                      usePhaseMatching: prev?.usePhaseMatching || false 
+                    }))}
+                  >
+                    <SelectTrigger className="w-48">
+                      <SelectValue placeholder="Select field for FTS" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {fullTextSearchFields.map((field) => (
+                        <SelectItem key={field} value={field}>
+                          {field}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  
+                  {fullTextSearch?.field && (
+                    <Input
+                      placeholder="Enter search terms..."
+                      value={fullTextSearch.query}
+                      onChange={(e) => setFullTextSearch(prev => prev ? { ...prev, query: e.target.value } : undefined)}
+                      className="flex-1"
+                    />
+                  )}
+                </div>
+                
+                {fullTextSearch?.field && (
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      checked={fullTextSearch.usePhaseMatching}
+                      onCheckedChange={(checked) => 
+                        setFullTextSearch(prev => prev ? { ...prev, usePhaseMatching: !!checked } : undefined)
+                      }
+                    />
+                    <Label className="text-sm">Require all search terms (phrase matching)</Label>
+                  </div>
+                )}
+              </div>
+            </div>
+            <Separator />
+          </>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-3">

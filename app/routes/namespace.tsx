@@ -29,11 +29,13 @@ export const action = async ({ params, request }: Route.ComponentProps) => {
   const filtersJson = formData.get("filters") as string;
   const orderByJson = formData.get("orderBy") as string;
   const topKValue = formData.get("topK") as string;
+  const fullTextSearchJson = formData.get("fullTextSearch") as string;
   
   try {
     const filters: Filter[] = filtersJson ? JSON.parse(filtersJson) : [];
     const orderBy = orderByJson ? JSON.parse(orderByJson) : null;
     const topK = topKValue ? Number(topKValue) : 100;
+    const fullTextSearch = fullTextSearchJson ? JSON.parse(fullTextSearchJson) : null;
     
     // Get schema to determine non-vector attributes
     const metadata = await getNamespace({ id: params.id });
@@ -55,7 +57,16 @@ export const action = async ({ params, request }: Route.ComponentProps) => {
       queryFilters = filters.map(f => [f.field, f.operator, f.value] as FilterCondition);
     }
     
-    if (orderBy) {
+    // Add phrase matching filter if full text search is enabled
+    if (fullTextSearch?.field && fullTextSearch.query && fullTextSearch.usePhaseMatching) {
+      const ftsFilter: FilterCondition = [fullTextSearch.field, "ContainsAllTokens", fullTextSearch.query];
+      queryFilters = queryFilters ? [...queryFilters, ftsFilter] : [ftsFilter];
+    }
+    
+    // Prioritize BM25 ranking for full text search, fallback to field ordering
+    if (fullTextSearch?.field && fullTextSearch.query) {
+      rankBy = [fullTextSearch.field, "BM25", fullTextSearch.query];
+    } else if (orderBy) {
       rankBy = [orderBy.field, orderBy.direction];
     }
     
@@ -121,16 +132,23 @@ export default function Namespace() {
     } catch {}
   };
 
-  const handleQuery = (filters: Filter[], orderBy?: { field: string; direction: "asc" | "desc" }, topK?: number) => {
+  const handleQuery = (
+    filters: Filter[], 
+    orderBy?: { field: string; direction: "asc" | "desc" }, 
+    topK?: number,
+    fullTextSearch?: { field: string; query: string; usePhaseMatching: boolean }
+  ) => {
     const formElement = document.querySelector("#query-form") as HTMLFormElement;
     if (formElement) {
       const filtersInput = formElement.querySelector("#filters-input") as HTMLInputElement;
       const orderByInput = formElement.querySelector("#orderby-input") as HTMLInputElement;
       const topKInput = formElement.querySelector("#topk-input") as HTMLInputElement;
+      const ftsInput = formElement.querySelector("#fts-input") as HTMLInputElement;
       
       filtersInput.value = JSON.stringify(filters);
       orderByInput.value = orderBy ? JSON.stringify(orderBy) : "";
       topKInput.value = String(topK || 100);
+      ftsInput.value = fullTextSearch ? JSON.stringify(fullTextSearch) : "";
       
       formElement.requestSubmit();
       setQuerySubmitted(true);
@@ -194,6 +212,7 @@ export default function Namespace() {
         <input type="hidden" name="filters" id="filters-input" />
         <input type="hidden" name="orderBy" id="orderby-input" />
         <input type="hidden" name="topK" id="topk-input" />
+        <input type="hidden" name="fullTextSearch" id="fts-input" />
       </Form>
 
       {schema && (
